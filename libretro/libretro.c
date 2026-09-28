@@ -36,7 +36,11 @@
 #include <switch.h>
 #endif
 #include <pthread.h>
+#ifdef HAVE_GLIDEN64
 #include <glsm/glsmsym.h>
+#else
+#include "no_gliden64.h"
+#endif
 
 #include "api/m64p_frontend.h"
 #include "api/m64p_types.h"

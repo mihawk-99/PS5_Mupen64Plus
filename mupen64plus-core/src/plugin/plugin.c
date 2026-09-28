@@ -93,7 +93,9 @@ void ResizeVideoOutput(int width, int height){
         X##FBGetFrameBufferInfo \
     }
 
+#ifdef HAVE_GLIDEN64
 DEFINE_GFX(gln64);
+#endif
 #if defined(HAVE_THR_AL)
 DEFINE_GFX(angrylion);
 #endif
@@ -398,6 +400,17 @@ enum rsp_plugin_type current_rsp_type = RSP_PLUGIN_NONE;
 
 void plugin_connect_rdp_api(enum rdp_plugin_type type)
 {
+#ifndef HAVE_GLIDEN64
+   /* Built without GLideN64: its requests go to ParaLLEl-RDP, or Angrylion. */
+   if (type == RDP_PLUGIN_GLIDEN64)
+   {
+#if defined(HAVE_PARALLEL_RDP)
+      type = RDP_PLUGIN_PARALLEL;
+#else
+      type = RDP_PLUGIN_ANGRYLION;
+#endif
+   }
+#endif
    switch (type)
    {
       case RDP_PLUGIN_GLIDEN64:
@@ -442,7 +455,9 @@ void plugin_connect_all()
 #endif
           break;
        case RDP_PLUGIN_GLIDEN64:
+#ifdef HAVE_GLIDEN64
           gfx = gfx_gln64;
+#endif
           break;
       case RDP_PLUGIN_NONE:
       default:
