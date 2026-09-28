@@ -31,6 +31,9 @@
 #endif
 
 #include "new_dynarec.h"
+#ifdef __PROSPERO__
+#include <ps5platform/exec.h>
+#endif
 #include "api/m64p_types.h"
 #include "api/callbacks.h"
 #include "main/main.h"
@@ -8705,6 +8708,14 @@ void new_dynarec_init(void)
   BOOL res=VirtualProtect((void*)g_dev.r4300.extra_memory, 33554432, PAGE_EXECUTE_READWRITE, &dummy);
   assert(res!=0);
   base_addr = base_addr_rx = (void*)g_dev.r4300.extra_memory;
+#elif defined(__PROSPERO__)
+  /* The PS5 runs code from direct memory (the payload SDK fork's
+   * ps5platform/exec.h), read-write-execute, placed within 2 GiB of the
+   * emulator's state so the translated code reaches it as it does
+   * extra_memory. */
+  base_addr = ps5_exec_allocate(1<<TARGET_SIZE_2, (uintptr_t)&g_dev);
+  if (base_addr == NULL) base_addr = (void*)-1;
+  base_addr_rx = base_addr;
 #else
   mprotect ((u_char *)g_dev.r4300.extra_memory, 1<<TARGET_SIZE_2,
             PROT_READ | PROT_WRITE | PROT_EXEC);
@@ -8772,6 +8783,8 @@ void new_dynarec_cleanup(void)
     VirtualFree(base_addr, 0, MEM_RELEASE);
   #elif NEW_DYNAREC == NEW_DYNAREC_ARM64 && CACHE_ADDR!=FIXED_CACHE_ADDR
     if (munmap (base_addr_rx, 1<<TARGET_SIZE_2) < 0) {DebugMessage(M64MSG_ERROR, "munmap() failed");}
+  #elif defined(__PROSPERO__)
+    ps5_exec_release(base_addr);
   #else
     mprotect(base_addr, 1<<TARGET_SIZE_2, PROT_READ | PROT_WRITE);
   #endif
