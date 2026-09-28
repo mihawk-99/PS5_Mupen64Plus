@@ -78,10 +78,17 @@ struct retro_core_option_v2_definition option_defs_us[] = {
 #ifdef HAVE_PARALLEL_RDP
             {"parallel", "ParaLLEl-RDP"},
 #endif
+#ifdef HAVE_GLIDEN64
             {"gliden64", "GLideN64"},
+#endif
             { NULL, NULL },
         },
+#if defined(__PROSPERO__) && defined(HAVE_PARALLEL_RDP)
+        /* The PS5 renders through Vulkan: ParaLLEl-RDP, upscaled below. */
+        "parallel"
+#else
         "gliden64"
+#endif
     },
     {
         CORE_NAME "-43screensize",
@@ -1162,7 +1169,13 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "4x", NULL },
             { "8x", NULL },
             { NULL, NULL },
-        }
+        },
+#ifdef __PROSPERO__
+        /* The PS5 upscales N64 games 8x, the most ParaLLEl-RDP offers. */
+        "8x"
+#else
+        NULL
+#endif
     },
     {
         CORE_NAME "-parallel-rdp-super-sampled-read-back",
@@ -1410,7 +1423,12 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             {"hle", "HLE"},
             { NULL, NULL },
         },
+#if defined(__PROSPERO__) && defined(HAVE_PARALLEL_RSP)
+        /* ParaLLEl-RDP is low-level, so the RSP is too. */
+        "parallel"
+#else
         "hle"
+#endif
     },
     {
         CORE_NAME "-FrameDuping",

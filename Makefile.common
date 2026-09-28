@@ -255,8 +255,15 @@ SOURCES_C += $(LIBRETRO_DIR)/libretro.c \
 	$(LIBRETRO_COMM_DIR)/vfs/vfs_implementation.c \
 	$(LIBRETRO_COMM_DIR)/streams/file_stream.c \
 	$(LIBRETRO_COMM_DIR)/compat/fopen_utf8.c \
-	$(ROOT_DIR)/custom/mupen64plus-core/api/vidext_libretro.c \
-	$(LIBRETRO_COMM_DIR)/glsm/glsm.c
+	$(ROOT_DIR)/custom/mupen64plus-core/api/vidext_libretro.c
+
+# GLideN64 is the OpenGL renderer. HAVE_GLIDEN64=0 builds the core without it
+# (and without any OpenGL): ParaLLEl-RDP and Angrylion render, and
+# custom/no_gliden64.c stands in for the entry points the libretro glue calls.
+HAVE_GLIDEN64 ?= 1
+ifeq ($(HAVE_GLIDEN64),1)
+COREFLAGS += -DHAVE_GLIDEN64
+SOURCES_C += $(LIBRETRO_COMM_DIR)/glsm/glsm.c
 
 
 SOURCES_CXX   += \
@@ -390,6 +397,9 @@ SOURCES_CXX   += \
 	$(VIDEODIR_GLIDEN64)/src/GLideNHQ/TxTexCache.cpp \
 	$(VIDEODIR_GLIDEN64)/src/GLideNHQ/TxUtil.cpp \
 	$(VIDEODIR_GLIDEN64)/src/RSP_LoadMatrix.cpp
+else
+SOURCES_C += $(ROOT_DIR)/custom/no_gliden64.c
+endif
 
 ifeq ($(HAVE_THR_AL), 1)
 CFLAGS      += -DHAVE_THR_AL
@@ -480,9 +490,11 @@ ifeq ($(HAVE_NEON),1)
 	SOURCES_ASM += $(LIBRETRO_COMM_DIR)/audio/conversion/float_to_s16_neon.S \
 						$(LIBRETRO_COMM_DIR)/audio/conversion/s16_to_float_neon.S \
 						$(LIBRETRO_COMM_DIR)/audio/resampler/drivers/sinc_resampler_neon.S
-else
+else ifeq ($(HAVE_GLIDEN64),1)
 	SOURCES_CXX   += $(VIDEODIR_GLIDEN64)/src/3DMath.cpp
 endif
+
+ifeq ($(HAVE_GLIDEN64),1)
 
 ifneq ($(platform), $(filter $(platform), ios-arm64 tvos-arm64))
 	EGL_LIB ?= -lEGL
@@ -519,3 +531,4 @@ else
 	SOURCES_C += $(LIBRETRO_COMM_DIR)/glsym/glsym_gl.c
 endif
 SOURCES_C += $(LIBRETRO_COMM_DIR)/glsym/rglgen.c
+endif # HAVE_GLIDEN64

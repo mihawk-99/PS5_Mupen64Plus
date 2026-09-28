@@ -88,8 +88,23 @@ ifneq ($(CORE_NAME),)
 	COREFLAGS += -DCORE_NAME=\""$(CORE_NAME)"\"
 endif
 
+# PS5 (a homebrew title's libretro core): Vulkan only, through ParaLLEl-RDP and
+# ParaLLEl-RSP; the console's libraries resolve at load time.
+ifeq ($(platform), ps5)
+   TARGET := $(TARGET_NAME)_libretro.so
+   LDFLAGS += -shared -Wl,--version-script=$(LIBRETRO_DIR)/link.T
+   GL_LIB :=
+   COREFLAGS += -DOS_LINUX
+   ASFLAGS = -f elf64 -d ELF_TYPE
+   HAVE_PARALLEL_RDP = 1
+   HAVE_PARALLEL_RSP = 1
+   HAVE_THR_AL = 1
+   LLE = 1
+   WITH_DYNAREC = x86_64
+   HAVE_GLIDEN64 = 0
+
 # Linux
-ifneq (,$(findstring unix,$(platform)))
+else ifneq (,$(findstring unix,$(platform)))
    TARGET := $(TARGET_NAME)_libretro.so
    LDFLAGS += -shared -Wl,--version-script=$(LIBRETRO_DIR)/link.T -Wl,--no-undefined
 
