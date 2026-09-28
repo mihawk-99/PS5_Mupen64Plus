@@ -9,6 +9,9 @@
 #include <algorithm>
 
 #include "jit_allocator.hpp"
+#ifdef __PROSPERO__
+#include <ps5platform/exec.h>
+#endif
 
 namespace RSP
 {
@@ -22,10 +25,22 @@ static constexpr bool huge_va = std::numeric_limits<size_t>::max() > 0x100000000
 // On 64-bit systems, we will never allocate more than one block, this is important since we must ensure that
 // relative jumps are reachable in 32-bits.
 // We won't actually allocate 1 GB on 64-bit, but just reserve VA space for it, which we have basically an infinite amount of.
+#ifdef __PROSPERO__
+// The PS5's executable memory is direct memory, committed when it is mapped and
+// read-write-execute from the start (the payload SDK fork's ps5platform/exec.h):
+// no address space to reserve, so a block is sized for what the RSP compiles.
+// Each block lies within 2 GiB of the core's code; Lightning reaches a target
+// out of 32-bit range through a register, so a second block is safe here.
+static constexpr size_t block_size = 64 * 1024 * 1024;
+#else
 static constexpr size_t block_size = huge_va ? (1024 * 1024 * 1024) : (2 * 1024 * 1024);
+#endif
 Allocator::~Allocator()
 {
-#ifdef _WIN32
+#if defined(__PROSPERO__)
+	for (auto &block : blocks)
+		ps5_exec_release(block.code);
+#elif defined(_WIN32)
 	for (auto &block : blocks)
 		VirtualFree(block.code, 0, MEM_RELEASE);
 #else
@@ -46,7 +61,11 @@ static size_t align_page(size_t offset)
 
 static bool commit_read_write(void *ptr, size_t size)
 {
-#ifdef _WIN32
+#if defined(__PROSPERO__)
+	(void)ptr;
+	(void)size;
+	return true;
+#elif defined(_WIN32)
 	return VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE) == ptr;
 #else
 	return mprotect(ptr, size, PROT_READ | PROT_WRITE) == 0;
@@ -55,7 +74,11 @@ static bool commit_read_write(void *ptr, size_t size)
 
 static bool commit_execute(void *ptr, size_t size)
 {
-#ifdef _WIN32
+#if defined(__PROSPERO__)
+	(void)ptr;
+	(void)size;
+	return true;
+#elif defined(_WIN32)
 	DWORD old_protect;
 	return VirtualProtect(ptr, align_page(size), PAGE_EXECUTE, &old_protect) != 0;
 #else
@@ -84,8 +107,10 @@ void *Allocator::allocate_code(size_t size)
 
 	if (!block)
 	{
+#ifndef __PROSPERO__
 		if (huge_va)
 			abort();
+#endif
 		blocks.push_back(reserve_block(std::max(size, block_size)));
 		block = &blocks.back();
 	}
@@ -104,7 +129,12 @@ void *Allocator::allocate_code(size_t size)
 Allocator::Block Allocator::reserve_block(size_t size)
 {
 	Block block;
-#ifdef _WIN32
+#if defined(__PROSPERO__)
+	block.code = static_cast<uint8_t *>(
+	    ps5_exec_allocate(size, reinterpret_cast<uintptr_t>(&Allocator::commit_code)));
+	block.size = block.code ? size : 0;
+	return block;
+#elif defined(_WIN32)
 	block.code = static_cast<uint8_t *>(VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_READWRITE));
 	block.size = size;
 	return block;
