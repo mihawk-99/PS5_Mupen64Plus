@@ -28,6 +28,14 @@ static QueryPoolHandle begin_ts, end_ts;
 
 static vector<retro_vulkan_image> retro_images;
 static vector<ImageHandle> retro_image_handles;
+
+// What the command processor was made with, to make it again with another
+// upscaling factor while a game runs (apply_flags_change)
+static void *rdram_base;
+static uintptr_t rdram_offset;
+static unsigned rdram_bytes;
+static CommandProcessorFlags active_flags;
+static void apply_flags_change();
 unsigned width, height;
 unsigned overscan;
 unsigned upscaling = 1;
@@ -156,11 +164,76 @@ void begin_frame()
 	}
 
 	vulkan->wait_sync_index(vulkan->handle);
+	apply_flags_change();
 	if (!begin_ts)
 		begin_ts = device->write_calibrated_timestamp();
 
 	//frontend->wait_for_timeline(pending_timeline_value);
 	//pending_timeline_value = timeline_value;
+}
+
+// The command processor's flags for the options as they are now
+static CommandProcessorFlags wanted_flags()
+{
+	CommandProcessorFlags flags = 0;
+	switch (upscaling)
+	{
+		case 2:
+			flags |= COMMAND_PROCESSOR_FLAG_UPSCALING_2X_BIT;
+			break;
+
+		case 4:
+			flags |= COMMAND_PROCESSOR_FLAG_UPSCALING_4X_BIT;
+			break;
+
+		case 8:
+			flags |= COMMAND_PROCESSOR_FLAG_UPSCALING_8X_BIT;
+			break;
+
+		default:
+			break;
+	}
+
+	if (upscaling > 1 && super_sampled_read_back)
+		flags |= COMMAND_PROCESSOR_FLAG_SUPER_SAMPLED_READ_BACK_BIT;
+	if (super_sampled_dither)
+		flags |= COMMAND_PROCESSOR_FLAG_SUPER_SAMPLED_DITHER_BIT;
+	return flags;
+}
+
+// The upscaling factor or the read-back options changed while a game runs:
+// the command processor is made again with them, once the GPU has finished
+// with the old one, so the change shows at the next frame instead of the next
+// boot. Its upscaled copies of the frame buffers start again from RDRAM.
+static void apply_flags_change()
+{
+	if (!frontend || wanted_flags() == active_flags)
+		return;
+
+	frontend->wait_for_timeline(timeline_value);
+	device->wait_idle();
+	frontend.reset();
+
+	const CommandProcessorFlags flags = wanted_flags();
+	frontend.reset(new CommandProcessor(*device, rdram_base, rdram_offset, rdram_bytes, rdram_bytes / 2, flags));
+	if (!frontend->device_is_supported())
+	{
+		log_cb(RETRO_LOG_ERROR, "paraLLEl-RDP: the device refused the new options.\n");
+		frontend.reset();
+		return;
+	}
+
+	RDP::Quirks quirks;
+	quirks.set_native_texture_lod(native_texture_lod);
+	quirks.set_native_resolution_tex_rect(native_tex_rect);
+	frontend->set_quirks(quirks);
+
+	active_flags = flags;
+	timeline_value = 0;
+	pending_timeline_value = 0;
+	width = 0;
+	height = 0;
+	log_cb(RETRO_LOG_INFO, "paraLLEl-RDP: now upscaling %ux.\n", upscaling);
 }
 
 bool init()
@@ -220,36 +293,17 @@ bool init()
 		return false;
 	}
 
-	CommandProcessorFlags flags = 0;
-	switch (upscaling)
-	{
-		case 2:
-			flags |= COMMAND_PROCESSOR_FLAG_UPSCALING_2X_BIT;
-			log_cb(RETRO_LOG_INFO, "Using 2x upscaling!\n");
-			break;
-
-		case 4:
-			flags |= COMMAND_PROCESSOR_FLAG_UPSCALING_4X_BIT;
-			log_cb(RETRO_LOG_INFO, "Using 4x upscaling!\n");
-			break;
-
-		case 8:
-			flags |= COMMAND_PROCESSOR_FLAG_UPSCALING_8X_BIT;
-			log_cb(RETRO_LOG_INFO, "Using 8x upscaling!\n");
-			break;
-
-		default:
-			break;
-	}
-
-	if (upscaling > 1 && super_sampled_read_back)
-		flags |= COMMAND_PROCESSOR_FLAG_SUPER_SAMPLED_READ_BACK_BIT;
-	if (super_sampled_dither)
-		flags |= COMMAND_PROCESSOR_FLAG_SUPER_SAMPLED_DITHER_BIT;
+	const CommandProcessorFlags flags = wanted_flags();
+	if (upscaling > 1)
+		log_cb(RETRO_LOG_INFO, "Using %ux upscaling!\n", upscaling);
 
 	log_cb(RETRO_LOG_INFO, "paraLLEl-RDP: Using RDRAM size of %u bytes.\n", rdram_size);
 	frontend.reset(new CommandProcessor(*device, reinterpret_cast<void *>(aligned_rdram),
 				offset, rdram_size, rdram_size / 2, flags));
+	rdram_base = reinterpret_cast<void *>(aligned_rdram);
+	rdram_offset = offset;
+	rdram_bytes = rdram_size;
+	active_flags = flags;
 
 	if (!frontend->device_is_supported())
 	{
