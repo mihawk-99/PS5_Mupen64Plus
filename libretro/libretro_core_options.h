@@ -1157,6 +1157,24 @@ struct retro_core_option_v2_definition option_defs_us[] = {
         }
     },
     {
+#ifdef __PROSPERO__
+        CORE_NAME "-parallel-rdp-upscaling",
+        "(ParaLLEl-RDP) Upscaling factor",
+        "Upscaling factor",
+        "Apply internal upscaling factor. Takes effect at the next frame.",
+        NULL,
+        "parallel_rdp",
+        {
+            { "1x", NULL },
+            { "2x", NULL },
+            { "4x", NULL },
+            { "8x", NULL },
+            { NULL, NULL },
+        },
+        /* The PS5 upscales N64 games 4x: 8x needed about ten times the GPU
+         * time and dropped frames on some consoles. */
+        "4x"
+#else
         CORE_NAME "-parallel-rdp-upscaling",
         "(ParaLLEl-RDP) Upscaling factor (restart)",
         "Upscaling factor (restart)",
@@ -1170,10 +1188,6 @@ struct retro_core_option_v2_definition option_defs_us[] = {
             { "8x", NULL },
             { NULL, NULL },
         },
-#ifdef __PROSPERO__
-        /* The PS5 upscales N64 games 8x, the most ParaLLEl-RDP offers. */
-        "8x"
-#else
         NULL
 #endif
     },

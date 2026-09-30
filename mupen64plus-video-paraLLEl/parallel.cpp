@@ -231,8 +231,14 @@ void parallel_get_geometry(struct retro_game_geometry *geom)
 {
 	geom->base_width = 640;
 	geom->base_height = 480;
+#ifdef __PROSPERO__
+	/* The most the option offers: the factor can change while a game runs. */
+	geom->max_width = geom->base_width * 8;
+	geom->max_height = geom->base_height * 8;
+#else
 	geom->max_width = geom->base_width * RDP::upscaling;
 	geom->max_height = geom->base_height * RDP::upscaling;
+#endif
 	geom->aspect_ratio = 4.0f / 3.0f;
 }
 }
